@@ -1,35 +1,45 @@
-name: Run SQL Scripts
-
-on: [push, pull_request]
-
+name: SQL Linting & Syntax Check
+ 
+on:
+  push:
+    paths:
+      - '**/*.sql'
+  pull_request:
+    paths:
+      - '**/*.sql'
+ 
 jobs:
-  run-sql:
+  lint-sql:
     runs-on: ubuntu-latest
-
-    services:
-      mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          SA_PASSWORD: Passw0rd@123
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd="/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Passw0rd@123 -Q 'SELECT 1'"
-          --health-interval=15s
-          --health-timeout=10s
-          --health-retries=5
-
+ 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-
-      - name: Install SQL Server client
-        run: sudo apt-get install -y mssql-tools unixodbc-dev
-
-      - name: Run SQL files
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+ 
+      - name: Install SQLFluff
+        run: pip install sqlfluff
+ 
+      - name: Find and Lint SQL files
         run: |
-          for file in *.sql; do
-            echo "Executing $file..."
-            /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Passw0rd@123 -d master -i "$file"
-          done
+          sql_files=$(find . -type f -name "*.sql")
+          if [[ -n "$sql_files" ]]; then
+            echo "Found SQL files, running SQLFluff lint..."
+            sqlfluff lint --dialect mysql $sql_files
+          else
+            echo "No SQL files found. Skipping linting."
+          fi
+ 
+      - name: Parse SQL files to check for syntax errors
+        run: |
+          sql_files=$(find . -type f -name "*.sql")
+          if [[ -n "$sql_files" ]]; then
+            echo "Checking SQL syntax with SQLFluff parse..."
+            sqlfluff parse --dialect mysql $sql_files
+          else
+            echo "No SQL files found. Skipping syntax check."
+          fi
